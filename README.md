@@ -10,6 +10,34 @@ This guide explains how to deploy BosBase as a standalone single-node installati
 
 ## Quick Start with Docker Compose
 
+## One-Click Install Scripts
+
+For freshly provisioned hosts you can run the bundled installers instead of performing every step manually.
+
+### Ubuntu 22.04+
+
+```bash
+git clone https://github.com/<your-org>/self-host.git
+cd self-host
+chmod +x install-ubuntu.sh
+sudo ./install-ubuntu.sh --domain yourdomain.com --email you@example.com --openai-key sk-xxx
+```
+
+- The script will prompt for any values you do not pass via flags (domain, email, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `BS_ENCRYPTION_KEY`).
+- `--non-interactive` forces the script to fail when required values are missing instead of prompting.
+- Assets are installed under `/opt/bosbase`, Docker + Caddy are installed if missing, and `docker-compose@bosbase.service` is enabled automatically.
+
+### Rocky Linux 9.x
+
+```bash
+git clone https://github.com/<your-org>/self-host.git
+cd self-host
+chmod +x install-rocky.sh
+sudo ./install-rocky.sh --domain yourdomain.com --email you@example.com --openai-key sk-xxx
+```
+
+This installer mirrors the Ubuntu behavior, but uses `dnf`, enables the Caddy COPR, configures SELinux/firewalld, and manages the same `/opt/bosbase` layout. Supply the same flags or environment variables as above for unattended deployments.
+
 ### 1. Pull Docker Images
 
 Pull the required Docker images from Docker Hub:
