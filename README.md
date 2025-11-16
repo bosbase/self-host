@@ -5,7 +5,7 @@ This guide explains how to deploy BosBase as a standalone single-node installati
 ## Prerequisites
 
 - Docker and Docker Compose installed
-- A server with at least 2GB RAM and 10GB disk space
+- A server with at least 0.2G RAM and 1GB disk space
 - Domain name (optional, for production deployments)
 
 ## Quick Start with Docker Compose
@@ -52,6 +52,8 @@ services:
     restart: unless-stopped
     environment:
       SASSPB_BOSBASEDB_URL: http://bosbasedb-node:4001
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       BS_ENCRYPTION_KEY: your-32-character-encryption-key-here
     ports:
       - "8090:8090"
@@ -77,7 +79,7 @@ docker-compose up -d
 ```
 
 This will start:
-- **bosbasedb-node**: Single-node rqlite database (port 4001)
+- **bosbasedb-node**: Single-node database database (port 4001)
 - **bosbase-node**: BosBase application server (port 8090)
 
 ### 4. Access the Application
@@ -90,7 +92,7 @@ Create your first admin user by accessing the admin UI and following the setup w
 Alternatively, create a superuser via command line:
 
 ```bash
-docker exec docker-bosbase-node-1 /pb/bosbase superuser upsert
+docker exec docker-bosbase-node-1 /pb/bosbase superuser upsert yourloginemail yourpassword
 ```
 
 ### 5. Stop the Services
@@ -279,13 +281,13 @@ The single-node `docker-compose.yml` includes:
 
 ### Services
 
-1. **bosbasedb-node**: Rqlite database
+1. **bosbasedb-node**: database
    - Single-node configuration with `-bootstrap-expect=1`
    - Port: 4001 (internal)
    - Data: `./bosbasedb-node1-data`
 
 2. **bosbase-node**: BosBase application
-   - Connected to rqlite via `SASSPB_BOSBASEDB_URL`
+   - Connected to database via `SASSPB_BOSBASEDB_URL`
    - Port: 8090
    - Data: `./bosbase-data`
 
@@ -295,7 +297,7 @@ Key environment variables you can customize:
 
 ```yaml
 environment:
-  # Rqlite connection (for bosbase-node)
+  # database connection (for bosbase-node)
   SASSPB_BOSBASEDB_URL: http://bosbasedb-node:4001
   
   # Encryption key (32+ characters)
@@ -309,7 +311,7 @@ environment:
 
 Data persistence is handled via Docker volumes:
 
-- `./bosbasedb-node1-data` - Rqlite database files
+- `./bosbasedb-node1-data` - database files
 - `./bosbase-data` - BosBase application data (if using local storage)
 
 **Important:** Make regular backups of these directories!
@@ -319,8 +321,8 @@ Data persistence is handled via Docker volumes:
 ### Backup
 
 ```bash
-# Backup rqlite data
-docker exec $(docker-compose ps -q bosbasedb-node) tar czf - /bosbasedb/file > rqlite-backup.tar.gz
+# Backup database data
+docker exec $(docker-compose ps -q bosbasedb-node) tar czf - /bosbasedb/file > database-backup.tar.gz
 
 # Backup bosbase data
 docker exec $(docker-compose ps -q bosbase-node) tar czf - /pb/pb_data > bosbase-backup.tar.gz
@@ -336,8 +338,8 @@ curl -X POST http://localhost:8090/api/backups \
 ### Restore
 
 ```bash
-# Restore rqlite
-docker exec -i $(docker-compose ps -q bosbasedb-node) tar xzf - < rqlite-backup.tar.gz
+# Restore database
+docker exec -i $(docker-compose ps -q bosbasedb-node) tar xzf - < database-backup.tar.gz
 
 # Restore bosbase
 docker exec -i $(docker-compose ps -q bosbase-node) tar xzf - < bosbase-backup.tar.gz
@@ -378,7 +380,7 @@ docker-compose logs -f bosbasedb-node
 # BosBase health
 curl http://localhost:8090/api/health
 
-# Rqlite status
+# database status
 curl http://localhost:4001/status
 ```
 
@@ -404,7 +406,7 @@ sudo chown -R $USER:$USER bosbase-data bosbasedb-node1-data
 
 ### Database Connection Issues
 
-Check if rqlite is ready:
+Check if database is ready:
 
 ```bash
 docker-compose logs bosbasedb-node | grep "node ready"
@@ -439,7 +441,7 @@ services:
       resources:
         limits:
           cpus: '2'
-          memory: 2G
+          memory: 1G
         reservations:
           cpus: '1'
           memory: 1G
@@ -450,12 +452,11 @@ services:
 For issues and questions:
 - Check the [main README.md](README.md)
 - Review Docker Compose logs
-- Check rqlite and BosBase documentation
+- Check doc.bosbase.com
 
 ## Next Steps
 
 - Configure your first collection in the Admin UI
 - Set up authentication and user management
 - Configure file storage (S3 recommended for production)
-- Review API documentation at `/api/docs` when running
-
+- Review API documentation
