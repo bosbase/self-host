@@ -390,8 +390,6 @@ main() {
 
   DOMAIN=$(prompt_domain "$DOMAIN")
   ACME_EMAIL=$(ensure_value "email" "Enter email for ACME (optional, press Enter to skip): " "optional" "$ACME_EMAIL")
-  OPENAI_KEY=$(ensure_value "OPENAI_API_KEY" "Enter OPENAI_API_KEY (optional): " "optional" "$OPENAI_KEY")
-  OPENAI_BASE_URL_VALUE=$(ensure_value "OPENAI_BASE_URL" "Enter OPENAI_BASE_URL (optional): " "optional" "$OPENAI_BASE_URL_VALUE")
 
   if [[ -z "$ENCRYPTION_KEY" ]]; then
     log "Generating BS_ENCRYPTION_KEY..."
