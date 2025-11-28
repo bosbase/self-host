@@ -332,14 +332,19 @@ EOF
   ln -sf "$caddy_path" /etc/caddy/Caddyfile
   log "Reloading Caddy with new configuration..."
   if systemctl is-active --quiet caddy; then
-    # Reload will fail if config is invalid, so we don't need separate validation
-    if ! systemctl reload caddy; then
-      die "Failed to reload Caddy - check Caddyfile configuration"
+    # Reload with timeout to prevent hanging
+    if timeout 10 systemctl reload caddy >/dev/null 2>&1; then
+      log "Caddy reloaded successfully"
+    else
+      warn "Caddy reload timed out or failed, will restart instead"
+      timeout 10 systemctl restart caddy >/dev/null 2>&1 || warn "Caddy restart also failed, continuing anyway"
     fi
   else
-    # Start will fail if config is invalid
-    if ! systemctl start caddy; then
-      die "Failed to start Caddy - check Caddyfile configuration"
+    # Start with timeout to prevent hanging
+    if timeout 10 systemctl start caddy >/dev/null 2>&1; then
+      log "Caddy started successfully"
+    else
+      warn "Caddy start timed out or failed, continuing anyway"
     fi
   fi
 }
