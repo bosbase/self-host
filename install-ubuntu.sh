@@ -436,6 +436,9 @@ main() {
   log "Installation complete."
   log "Files installed under $INSTALL_DIR"
   log "Domain ${DOMAIN} is now proxied via Caddy."
+  log ""
+  log "To see dashboard login instructions, run:"
+  log "  docker logs bosbase-bosbase-node-1"
 }
 
 main "$@"

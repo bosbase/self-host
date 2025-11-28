@@ -44,7 +44,7 @@ This installer mirrors the Ubuntu behavior, but uses `dnf`, enables the Caddy CO
 Pull the required Docker images from Docker Hub:
 
 ```bash
-docker pull bosbasedb:vb1
+docker pull bosbasedb:vb1s
 docker pull bosbase:vb1
 ```
 
