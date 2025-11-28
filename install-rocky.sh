@@ -243,8 +243,6 @@ configure_selinux_firewall() {
 write_compose_file() {
   local compose_path="$INSTALL_DIR/docker-compose.yml"
   cat > "$compose_path" <<EOF
-version: "3.8"
-
 services:
   bosbasedb-node:
     image: bosbase/bosbasedb:vb1
@@ -423,7 +421,6 @@ main() {
   write_systemd_unit
 
   health_check "http://localhost:8090/api/health" "BosBase API"
-  health_check "http://localhost:4001/status" "BosBaseDB"
 
   log "Installation complete."
   log "Files installed under $INSTALL_DIR"

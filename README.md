@@ -60,8 +60,6 @@ docker pull <registry>/bosbase:vb1
 Create a `docker-compose.yml` file in your working directory:
 
 ```yaml
-version: "3.8"
-
 services:
   bosbasedb-node:
     image: bosbase/bosbasedb:vb1
