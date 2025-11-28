@@ -330,14 +330,17 @@ www.${DOMAIN} {
 }
 EOF
   ln -sf "$caddy_path" /etc/caddy/Caddyfile
-  log "Validating Caddyfile..."
-  if ! timeout 10 caddy validate --config "$caddy_path" >/dev/null 2>&1; then
-    die "Caddyfile validation failed"
-  fi
+  log "Reloading Caddy with new configuration..."
   if systemctl is-active --quiet caddy; then
-    systemctl reload caddy
+    # Reload will fail if config is invalid, so we don't need separate validation
+    if ! systemctl reload caddy; then
+      die "Failed to reload Caddy - check Caddyfile configuration"
+    fi
   else
-    systemctl restart caddy
+    # Start will fail if config is invalid
+    if ! systemctl start caddy; then
+      die "Failed to start Caddy - check Caddyfile configuration"
+    fi
   fi
 }
 
