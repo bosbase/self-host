@@ -292,12 +292,6 @@ write_caddyfile() {
     email_block=$'{\n\temail '"$ACME_EMAIL"$'\n}\n\n'
   fi
 
-  # Ensure log directory exists with proper permissions
-  install -d -m 755 /var/log/caddy
-  # Set ownership to caddy user if it exists, otherwise root
-  if id caddy >/dev/null 2>&1; then
-    chown caddy:caddy /var/log/caddy 2>/dev/null || true
-  fi
 
   cat > "$caddy_path" <<EOF
 ${email_block}${DOMAIN} {
@@ -322,11 +316,6 @@ ${email_block}${DOMAIN} {
     X-XSS-Protection "1; mode=block"
     Referrer-Policy "no-referrer-when-downgrade"
     Strict-Transport-Security "max-age=31536000; includeSubDomains"
-  }
-
-  log {
-    output file /var/log/caddy/bosbase.log
-    format json
   }
 }
 
