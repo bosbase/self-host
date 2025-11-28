@@ -376,6 +376,13 @@ EOF
   systemctl enable --now "$UNIT_NAME"
 }
 
+stop_existing_containers() {
+  if [[ -d "$INSTALL_DIR" ]] && [[ -f "$INSTALL_DIR/docker-compose.yml" ]]; then
+    log "Stopping existing containers..."
+    (cd "$INSTALL_DIR" && docker compose --project-name "$PROJECT_NAME" down 2>/dev/null || true)
+  fi
+}
+
 prepare_directories() {
   install -d -m 755 "$INSTALL_DIR"
   # Remove existing data directories for clean install
@@ -438,6 +445,7 @@ main() {
   ensure_permissions
   ensure_caddy
 
+  stop_existing_containers
   prepare_directories
   write_compose_file
   write_env_file
