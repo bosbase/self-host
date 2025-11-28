@@ -28,7 +28,7 @@ Options:
   --email VALUE            Email address for ACME/Let's Encrypt (recommended)
   --openai-key VALUE       OPENAI_API_KEY to inject into the stack
   --openai-base-url VALUE  OPENAI_BASE_URL to inject into the stack
-  --encryption-key VALUE   64 character BS_ENCRYPTION_KEY (auto-generated if omitted)
+  --encryption-key VALUE   32 character BS_ENCRYPTION_KEY (auto-generated if omitted)
   --install-dir PATH       Installation directory (default: /opt/bosbase)
   --user NAME              System user to grant docker access (defaults to invoking user)
   --non-interactive        Fail instead of prompting for missing values
@@ -400,11 +400,11 @@ main() {
     if ! command -v openssl >/dev/null 2>&1; then
       dnf -y install openssl
     fi
-    ENCRYPTION_KEY=$(openssl rand -hex 32)
+    ENCRYPTION_KEY=$(openssl rand -hex 16)
   fi
 
-  if [[ ${#ENCRYPTION_KEY} -lt 32 ]]; then
-    die "BS_ENCRYPTION_KEY must be at least 32 characters."
+  if [[ ${#ENCRYPTION_KEY} -ne 32 ]]; then
+    die "BS_ENCRYPTION_KEY must be exactly 32 characters (got ${#ENCRYPTION_KEY})."
   fi
 
   log "Installing prerequisites..."
