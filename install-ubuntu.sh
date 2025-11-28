@@ -220,7 +220,10 @@ EOF
 ensure_caddy() {
   if command -v caddy >/dev/null 2>&1; then
     log "Caddy already installed."
-    systemctl enable --now caddy
+    systemctl enable caddy >/dev/null 2>&1 || true
+    if ! systemctl is-active --quiet caddy; then
+      timeout 5 systemctl start caddy || warn "Caddy start timed out or failed, continuing anyway"
+    fi
     return
   fi
 
@@ -233,7 +236,8 @@ deb [signed-by=/usr/share/keyrings/caddy.gpg] https://dl.cloudsmith.io/public/ca
 EOF
   apt-get update
   apt-get install -y caddy
-  systemctl enable --now caddy
+  systemctl enable caddy >/dev/null 2>&1 || true
+  timeout 5 systemctl start caddy || warn "Caddy start timed out or failed, continuing anyway"
 }
 
 write_compose_file() {
