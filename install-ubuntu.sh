@@ -242,7 +242,7 @@ EOF
 
 write_compose_file() {
   local compose_path="$INSTALL_DIR/docker-compose.yml"
-  cat > "$compose_path" <<'EOF'
+  cat > "$compose_path" <<EOF
 version: "3.8"
 
 services:
@@ -264,9 +264,9 @@ services:
     restart: unless-stopped
     environment:
       SASSPB_BOSBASEDB_URL: http://bosbasedb-node:4001
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
-      BS_ENCRYPTION_KEY: ${BS_ENCRYPTION_KEY}
+      OPENAI_API_KEY: \${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: \${OPENAI_BASE_URL:-}
+      BS_ENCRYPTION_KEY: ${ENCRYPTION_KEY}
     ports:
       - "8090:8090"
     volumes:
