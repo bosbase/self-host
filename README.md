@@ -57,15 +57,8 @@ sudo ./install-rocky.sh --domain yourdomain.com --email you@example.com \
 Pull the required Docker images from Docker Hub:
 
 ```bash
-docker pull bosbasedb:vb1s
-docker pull bosbase:vb1
-```
-
-Or if the images are in a different registry:
-
-```bash
-docker pull <registry>/bosbasedb:vb1
-docker pull <registry>/bosbase:vb1
+docker pull bosbase/bosbasedb:vb1
+docker pull bosbase/bosbase:vb1
 ```
 
 ### 2. Create Docker Compose File
