@@ -17,7 +17,7 @@ For freshly provisioned hosts you can run the bundled installers instead of perf
 ### Ubuntu 22.04+
 
 ```bash
-git clone https://github.com/<your-org>/self-host.git
+git clone https://github.com/bosbase/self-host.git
 cd self-host
 chmod +x install-ubuntu.sh
 sudo ./install-ubuntu.sh --domain yourdomain.com --email you@example.com
@@ -37,7 +37,7 @@ sudo ./install-ubuntu.sh --domain yourdomain.com --email you@example.com
 ### Rocky Linux 9.x
 
 ```bash
-git clone https://github.com/<your-org>/self-host.git
+git clone https://github.com/bosbase/self-host.git
 cd self-host
 chmod +x install-rocky.sh
 sudo ./install-rocky.sh --domain yourdomain.com --email you@example.com
