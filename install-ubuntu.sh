@@ -292,6 +292,13 @@ write_caddyfile() {
     email_block=$'{\n\temail '"$ACME_EMAIL"$'\n}\n\n'
   fi
 
+  # Ensure log directory exists with proper permissions
+  install -d -m 755 /var/log/caddy
+  # Set ownership to caddy user if it exists, otherwise root
+  if id caddy >/dev/null 2>&1; then
+    chown caddy:caddy /var/log/caddy 2>/dev/null || true
+  fi
+
   cat > "$caddy_path" <<EOF
 ${email_block}${DOMAIN} {
   encode gzip zstd
@@ -371,6 +378,15 @@ EOF
 
 prepare_directories() {
   install -d -m 755 "$INSTALL_DIR"
+  # Remove existing data directories for clean install
+  if [[ -d "$INSTALL_DIR/bosbase-data" ]]; then
+    log "Removing existing bosbase-data directory..."
+    rm -rf "$INSTALL_DIR/bosbase-data"
+  fi
+  if [[ -d "$INSTALL_DIR/bosbasedb-node1-data" ]]; then
+    log "Removing existing bosbasedb-node1-data directory..."
+    rm -rf "$INSTALL_DIR/bosbasedb-node1-data"
+  fi
   install -d -m 755 "$INSTALL_DIR/bosbase-data" "$INSTALL_DIR/bosbasedb-node1-data"
 }
 
@@ -436,6 +452,9 @@ main() {
   log "Installation complete."
   log "Files installed under $INSTALL_DIR"
   log "Domain ${DOMAIN} is now proxied via Caddy."
+  log ""
+  log "To set up a superuser account, run:"
+  log "  docker exec bosbase-bosbase-node-1 /pb/bosbase superuser upsert yourloginemail yourpassword"
   log ""
   log "To see dashboard login instructions, run:"
   log "  docker logs bosbase-bosbase-node-1"

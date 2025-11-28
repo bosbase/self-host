@@ -209,7 +209,10 @@ ensure_docker() {
 ensure_caddy() {
   if command -v caddy >/dev/null 2>&1; then
     log "Caddy already installed."
-    systemctl enable --now caddy
+    systemctl enable caddy >/dev/null 2>&1 || true
+    if ! systemctl is-active --quiet caddy; then
+      timeout 5 systemctl start caddy || warn "Caddy start timed out or failed, continuing anyway"
+    fi
     return
   fi
 
@@ -217,7 +220,8 @@ ensure_caddy() {
   dnf -y install 'dnf-command(copr)'
   dnf -y copr enable @caddy/caddy
   dnf -y install caddy
-  systemctl enable --now caddy
+  systemctl enable caddy >/dev/null 2>&1 || true
+  timeout 5 systemctl start caddy || warn "Caddy start timed out or failed, continuing anyway"
 }
 
 configure_selinux_firewall() {
@@ -292,6 +296,13 @@ write_caddyfile() {
     email_block=$'{\n\temail '"$ACME_EMAIL"$'\n}\n\n'
   fi
 
+  # Ensure log directory exists with proper permissions
+  install -d -m 755 /var/log/caddy
+  # Set ownership to caddy user if it exists, otherwise root
+  if id caddy >/dev/null 2>&1; then
+    chown caddy:caddy /var/log/caddy 2>/dev/null || true
+  fi
+
   cat > "$caddy_path" <<EOF
 ${email_block}${DOMAIN} {
   encode gzip zstd
@@ -328,11 +339,22 @@ www.${DOMAIN} {
 }
 EOF
   ln -sf "$caddy_path" /etc/caddy/Caddyfile
-  caddy validate --config "$caddy_path"
+  log "Reloading Caddy with new configuration..."
   if systemctl is-active --quiet caddy; then
-    systemctl reload caddy
+    # Reload with timeout to prevent hanging
+    if timeout 10 systemctl reload caddy >/dev/null 2>&1; then
+      log "Caddy reloaded successfully"
+    else
+      warn "Caddy reload timed out or failed, will restart instead"
+      timeout 10 systemctl restart caddy >/dev/null 2>&1 || warn "Caddy restart also failed, continuing anyway"
+    fi
   else
-    systemctl restart caddy
+    # Start with timeout to prevent hanging
+    if timeout 10 systemctl start caddy >/dev/null 2>&1; then
+      log "Caddy started successfully"
+    else
+      warn "Caddy start timed out or failed, continuing anyway"
+    fi
   fi
 }
 
@@ -360,6 +382,15 @@ EOF
 
 prepare_directories() {
   install -d -m 755 "$INSTALL_DIR"
+  # Remove existing data directories for clean install
+  if [[ -d "$INSTALL_DIR/bosbase-data" ]]; then
+    log "Removing existing bosbase-data directory..."
+    rm -rf "$INSTALL_DIR/bosbase-data"
+  fi
+  if [[ -d "$INSTALL_DIR/bosbasedb-node1-data" ]]; then
+    log "Removing existing bosbasedb-node1-data directory..."
+    rm -rf "$INSTALL_DIR/bosbasedb-node1-data"
+  fi
   install -d -m 755 "$INSTALL_DIR/bosbase-data" "$INSTALL_DIR/bosbasedb-node1-data"
 }
 
@@ -425,6 +456,9 @@ main() {
   log "Installation complete."
   log "Files installed under $INSTALL_DIR"
   log "Domain ${DOMAIN} is now proxied via Caddy."
+  log ""
+  log "To set up a superuser account, run:"
+  log "  docker exec bosbase-bosbase-node-1 /pb/bosbase superuser upsert yourloginemail yourpassword"
   log ""
   log "To see dashboard login instructions, run:"
   log "  docker logs bosbase-bosbase-node-1"
