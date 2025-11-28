@@ -64,7 +64,7 @@ version: "3.8"
 
 services:
   bosbasedb-node:
-    image: bosbasedb:vb1
+    image: bosbase/bosbasedb:vb1
     restart: unless-stopped
     environment:
       HTTP_ADDR: 0.0.0.0:4001
@@ -77,7 +77,7 @@ services:
     command: ["-bootstrap-expect", "1"]
 
   bosbase-node:
-    image: bosbase:vb1
+    image: bosbase/bosbase:vb1
     restart: unless-stopped
     environment:
       SASSPB_BOSBASEDB_URL: http://bosbasedb-node:4001
