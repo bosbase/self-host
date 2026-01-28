@@ -245,8 +245,7 @@ configure_selinux_firewall() {
 }
 
 write_compose_file() {
-  local compose_path="$INSTALL_DIR/docker-compose.yml"
-  cat > "$compose_path" <<'EOF'
+  cat > "$INSTALL_DIR/docker-compose.db.yml" <<'EOF'
 services:
   postgres-db:
     image: pgvector/pgvector:pg16
@@ -274,14 +273,9 @@ networks:
     name: basenode
 EOF
 
-  cat > "$INSTALL_DIR/docker-compose.app.yml" <<EOF
+  cat > "$INSTALL_DIR/docker-compose.yml" <<EOF
 services:
   bosbase-node:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-      args:
-        CGO_ENABLED: 1
     image: bosbase/bosbase:ve1
     restart: unless-stopped
     environment:
@@ -290,11 +284,18 @@ services:
       OPENAI_API_KEY: \${OPENAI_API_KEY:-sk-af61vU1kIT0uw5YzOM7VRM3KGrxBAfuhVgJX9ghtkHfdRVsu}
       OPENAI_BASE_URL: \${OPENAI_BASE_URL:-https://api.chatanywhere.org/v1}
       PB_ACTIVATION_VERIFY_URL: \${PB_ACTIVATION_VERIFY_URL:-https://ve.bosbase.com/verify}
+      # REDIS_URL: \${REDIS_URL:-192.168.1.60:6379}
+      # REDIS_PASSWORD: \${REDIS_PASSWORD:-}
       WASM_ENABLE: \${WASM_ENABLE:-true}
       WASM_INSTANCE_NUM: \${WASM_INSTANCE_NUM:-32}
       SCRIPT_CONCURRENCY: \${SCRIPT_CONCURRENCY:-32}
       FUNCTION_CONN_NUM: \${FUNCTION_CONN_NUM:-10}
       EXECUTE_PATH: \${EXECUTE_PATH:-/pb/functions}
+      # BOOSTER_PATH: \${BOOSTER_PATH:-/pb/booster-wasm}
+      # BOOSTER_POOL_MAX: \${BOOSTER_POOL_MAX:-2}
+      # BOOSTER_WASMTIME_MEMORY_GUARD_SIZE: \${BOOSTER_WASMTIME_MEMORY_GUARD_SIZE:-65536}
+      # BOOSTER_WASMTIME_MEMORY_RESERVATION: \${BOOSTER_WASMTIME_MEMORY_RESERVATION:-0}
+      # BOOSTER_WASMTIME_MEMORY_RESERVATION_FOR_GROWTH: \${BOOSTER_WASMTIME_MEMORY_RESERVATION_FOR_GROWTH:-1048576}
       PB_DATA_MAX_OPEN_CONNS: \${PB_DATA_MAX_OPEN_CONNS:-30}
       PB_DATA_MAX_IDLE_CONNS: \${PB_DATA_MAX_IDLE_CONNS:-15}
       PB_AUX_MAX_OPEN_CONNS: \${PB_AUX_MAX_OPEN_CONNS:-10}
@@ -308,9 +309,6 @@ services:
       - ./pb_hooks:/pb_hooks
     networks:
       - basenode
-    depends_on:
-      postgres-db:
-        condition: service_healthy
 
 networks:
   basenode:
@@ -407,8 +405,8 @@ After=docker.service
 
 [Service]
 WorkingDirectory=${INSTALL_DIR}
-ExecStart=/usr/bin/docker compose --project-name ${PROJECT_NAME} -f docker-compose.yml -f docker-compose.app.yml up -d
-ExecStop=/usr/bin/docker compose --project-name ${PROJECT_NAME} -f docker-compose.yml -f docker-compose.app.yml down
+ExecStart=/bin/sh -c 'docker compose --project-name ${PROJECT_NAME} -f docker-compose.db.yml up -d && docker compose --project-name ${PROJECT_NAME} -f docker-compose.yml up -d'
+ExecStop=/bin/sh -c 'docker compose --project-name ${PROJECT_NAME} -f docker-compose.yml down && docker compose --project-name ${PROJECT_NAME} -f docker-compose.db.yml down'
 TimeoutStartSec=0
 RemainAfterExit=yes
 
@@ -447,7 +445,8 @@ prepare_directories() {
 
 run_compose() {
   log "Starting Docker Compose stack..."
-  (cd "$INSTALL_DIR" && docker compose --project-name "$PROJECT_NAME" -f docker-compose.yml -f docker-compose.app.yml up -d)
+  (cd "$INSTALL_DIR" && docker compose --project-name "$PROJECT_NAME" -f docker-compose.db.yml up -d)
+  (cd "$INSTALL_DIR" && docker compose --project-name "$PROJECT_NAME" -f docker-compose.yml up -d)
 }
 
 health_check() {

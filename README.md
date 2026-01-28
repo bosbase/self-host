@@ -57,50 +57,100 @@ sudo ./install-rocky.sh --domain yourdomain.com --email you@example.com \
 Pull the required Docker images from Docker Hub:
 
 ```bash
-docker pull bosbase/bosbasedb:vb1
-docker pull bosbase/bosbase:vb1
+docker pull pgvector/pgvector:pg16
+docker pull bosbase/bosbase:ve1
 ```
 
 ### 2. Create Docker Compose File
 
 Create a `docker-compose.yml` file in your working directory:
 
+**docker-compose.db.yml (database):**
+
 ```yaml
 services:
-  bosbasedb-node:
-    image: bosbase/bosbasedb:vb1
+  postgres-db:
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
-      HTTP_ADDR: 0.0.0.0:4001
-      RAFT_ADDR: 0.0.0.0:4002
-      HTTP_ADV_ADDR: bosbasedb-node:4001
-      RAFT_ADV_ADDR: bosbasedb-node:4002
-      NODE_ID: node1
+      POSTGRES_DB: pbosbase
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     volumes:
-      - ./bosbasedb-node1-data:/bosbasedb/file
-    command: ["-bootstrap-expect", "1"]
+      - ./postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - basenode
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d pbosbase"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
+networks:
+  basenode:
+    driver: bridge
+    name: basenode
+```
+
+**docker-compose.yml (application):**
+
+```yaml
+services:
   bosbase-node:
-    image: bosbase/bosbase:vb1
+    image: bosbase/bosbase:ve1
     restart: unless-stopped
     environment:
-      SASSPB_BOSBASEDB_URL: http://bosbasedb-node:4001
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      SASSPB_POSTGRES_URL: postgres://postgres:postgres@postgres-db:5432/pbosbase?sslmode=disable
       BS_ENCRYPTION_KEY: your-32-character-encryption-key-here
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-af61vU1kIT0uw5YzOM7VRM3KGrxBAfuhVgJX9ghtkHfdRVsu}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.chatanywhere.org/v1}
+      PB_ACTIVATION_VERIFY_URL: ${PB_ACTIVATION_VERIFY_URL:-https://ve.bosbase.com/verify}
+      # REDIS_URL: ${REDIS_URL:-192.168.1.60:6379}
+      # REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      WASM_ENABLE: ${WASM_ENABLE:-true}
+      WASM_INSTANCE_NUM: ${WASM_INSTANCE_NUM:-32}
+      SCRIPT_CONCURRENCY: ${SCRIPT_CONCURRENCY:-32}
+      FUNCTION_CONN_NUM: ${FUNCTION_CONN_NUM:-10}
+      EXECUTE_PATH: ${EXECUTE_PATH:-/pb/functions}
+      # BOOSTER_PATH: ${BOOSTER_PATH:-/pb/booster-wasm}
+      # BOOSTER_POOL_MAX: ${BOOSTER_POOL_MAX:-2}
+      # BOOSTER_WASMTIME_MEMORY_GUARD_SIZE: ${BOOSTER_WASMTIME_MEMORY_GUARD_SIZE:-65536}
+      # BOOSTER_WASMTIME_MEMORY_RESERVATION: ${BOOSTER_WASMTIME_MEMORY_RESERVATION:-0}
+      # BOOSTER_WASMTIME_MEMORY_RESERVATION_FOR_GROWTH: ${BOOSTER_WASMTIME_MEMORY_RESERVATION_FOR_GROWTH:-1048576}
+      PB_DATA_MAX_OPEN_CONNS: ${PB_DATA_MAX_OPEN_CONNS:-30}
+      PB_DATA_MAX_IDLE_CONNS: ${PB_DATA_MAX_IDLE_CONNS:-15}
+      PB_AUX_MAX_OPEN_CONNS: ${PB_AUX_MAX_OPEN_CONNS:-10}
+      PB_AUX_MAX_IDLE_CONNS: ${PB_AUX_MAX_IDLE_CONNS:-3}
+      PB_QUERY_TIMEOUT: ${PB_QUERY_TIMEOUT:-300s}
     ports:
       - "8090:8090"
+      - "2678:2678"
     volumes:
       - ./bosbase-data:/pb/pb_data
-    depends_on:
-      - bosbasedb-node
-    command: ["/pb/bosbase", "serve", "--http=0.0.0.0:8090", "--encryptionEnv", "BS_ENCRYPTION_KEY"]
+      - ./pb_hooks:/pb_hooks
+    networks:
+      - basenode
+
+networks:
+  basenode:
+    external: true
+    name: basenode
 ```
 
 **Important:** Generate a strong encryption key and replace `your-32-character-encryption-key-here`:
 
 ```bash
-openssl rand -hex 32
+openssl rand -hex 16
+```
+
+Create a `.env` file for environment variables:
+
+```bash
+OPENAI_API_KEY=sk-your-key-here
+OPENAI_BASE_URL=https://api.openai.com/v1
 ```
 
 ### 3. Start the Services
@@ -108,12 +158,13 @@ openssl rand -hex 32
 Start the services using Docker Compose:
 
 ```bash
-docker-compose up -d
+docker compose -f docker-compose.db.yml up -d
+docker compose -f docker-compose.yml up -d
 ```
 
 This will start:
-- **bosbasedb-node**: Single-node database database (port 4001)
-- **bosbase-node**: BosBase application server (port 8090)
+- **postgres-db**: PostgreSQL database with pgvector extension (port 5432)
+- **bosbase-node**: BosBase application server (ports 8090, 2678)
 
 ### 4. Access the Application
 
@@ -131,12 +182,14 @@ docker exec docker-bosbase-node-1 /pb/bosbase superuser upsert yourloginemail yo
 ### 5. Stop the Services
 
 ```bash
-docker-compose down
+docker compose -f docker-compose.yml down
+docker compose -f docker-compose.db.yml down
 ```
 
 To also remove volumes (⚠️ **deletes all data**):
 ```bash
-docker-compose down -v
+docker compose -f docker-compose.yml down -v
+docker compose -f docker-compose.db.yml down -v
 ```
 
 ## Reverse Proxy Configuration
@@ -310,19 +363,21 @@ Caddy will automatically:
 
 ## Docker Compose Configuration
 
-The single-node `docker-compose.yml` includes:
+The single-node setup includes two compose files:
 
 ### Services
 
-1. **bosbasedb-node**: database
-   - Single-node configuration with `-bootstrap-expect=1`
-   - Port: 4001 (internal)
-   - Data: `./bosbasedb-node1-data`
+1. **postgres-db**: PostgreSQL database with pgvector extension
+   - Image: pgvector/pgvector:pg16
+   - Port: 5432
+   - Data: `./postgres-data`
+   - Health check enabled
 
 2. **bosbase-node**: BosBase application
-   - Connected to database via `SASSPB_BOSBASEDB_URL`
-   - Port: 8090
-   - Data: `./bosbase-data`
+   - Image: bosbase/bosbase:ve1
+   - Connected to PostgreSQL via `SASSPB_POSTGRES_URL`
+   - Ports: 8090 (main API), 2678 (additional service)
+   - Data: `./bosbase-data`, `./pb_hooks`
 
 ### Environment Variables
 
@@ -330,22 +385,52 @@ Key environment variables you can customize:
 
 ```yaml
 environment:
-  # database connection (for bosbase-node)
-  SASSPB_BOSBASEDB_URL: http://bosbasedb-node:4001
-  
-  # Encryption key (32+ characters)
+  # PostgreSQL connection (for bosbase-node)
+  SASSPB_POSTGRES_URL: postgres://postgres:postgres@postgres-db:5432/pbosbase?sslmode=disable
+
+  # Encryption key (32 hex characters)
   BS_ENCRYPTION_KEY: your-encryption-key-here
-  
-  # Optional: Custom encryption env var name
-  # SASSPB_ENCRYPTION_ENV: BS_ENCRYPTION_KEY
+
+  # OpenAI API (optional, for vector and LLM features)
+  OPENAI_API_KEY: sk-your-key-here
+  OPENAI_BASE_URL: https://api.openai.com/v1
+
+  # Activation verification
+  PB_ACTIVATION_VERIFY_URL: https://ve.bosbase.com/verify
+
+  # Optional: Redis configuration
+  # REDIS_URL: 192.168.1.60:6379
+  # REDIS_PASSWORD:
+
+  # WASM and Script execution
+  WASM_ENABLE: true
+  WASM_INSTANCE_NUM: 32
+  SCRIPT_CONCURRENCY: 32
+  FUNCTION_CONN_NUM: 10
+  EXECUTE_PATH: /pb/functions
+
+  # Optional: Booster configuration
+  # BOOSTER_PATH: /pb/booster-wasm
+  # BOOSTER_POOL_MAX: 2
+  # BOOSTER_WASMTIME_MEMORY_GUARD_SIZE: 65536
+  # BOOSTER_WASMTIME_MEMORY_RESERVATION: 0
+  # BOOSTER_WASMTIME_MEMORY_RESERVATION_FOR_GROWTH: 1048576
+
+  # Database connection pool settings
+  PB_DATA_MAX_OPEN_CONNS: 30
+  PB_DATA_MAX_IDLE_CONNS: 15
+  PB_AUX_MAX_OPEN_CONNS: 10
+  PB_AUX_MAX_IDLE_CONNS: 3
+  PB_QUERY_TIMEOUT: 300s
 ```
 
 ### Volumes
 
 Data persistence is handled via Docker volumes:
 
-- `./bosbasedb-node1-data` - database files
-- `./bosbase-data` - BosBase application data (if using local storage)
+- `./postgres-data` - PostgreSQL database files with pgvector
+- `./bosbase-data` - BosBase application data
+- `./pb_hooks` - Custom hooks directory (preserved on reinstall)
 
 **Important:** Make regular backups of these directories!
 
@@ -354,11 +439,14 @@ Data persistence is handled via Docker volumes:
 ### Backup
 
 ```bash
-# Backup database data
-docker exec $(docker-compose ps -q bosbasedb-node) tar czf - /bosbasedb/file > database-backup.tar.gz
+# Backup PostgreSQL database
+docker exec $(docker compose -f docker-compose.db.yml ps -q postgres-db) pg_dump -U postgres pbosbase > database-backup.sql
+
+# Or backup entire data directory
+docker exec $(docker compose -f docker-compose.db.yml ps -q postgres-db) tar czf - /var/lib/postgresql/data > postgres-backup.tar.gz
 
 # Backup bosbase data
-docker exec $(docker-compose ps -q bosbase-node) tar czf - /pb/pb_data > bosbase-backup.tar.gz
+docker exec $(docker compose -f docker-compose.yml ps -q bosbase-node) tar czf - /pb/pb_data > bosbase-backup.tar.gz
 ```
 
 Or use BosBase's built-in backup API:
@@ -371,11 +459,11 @@ curl -X POST http://localhost:8090/api/backups \
 ### Restore
 
 ```bash
-# Restore database
-docker exec -i $(docker-compose ps -q bosbasedb-node) tar xzf - < database-backup.tar.gz
+# Restore PostgreSQL database
+docker exec -i $(docker compose -f docker-compose.db.yml ps -q postgres-db) psql -U postgres -d pbosbase < database-backup.sql
 
 # Restore bosbase
-docker exec -i $(docker-compose ps -q bosbase-node) tar xzf - < bosbase-backup.tar.gz
+docker exec -i $(docker compose -f docker-compose.yml ps -q bosbase-node) tar xzf - < bosbase-backup.tar.gz
 ```
 
 ## Updating
@@ -383,15 +471,15 @@ docker exec -i $(docker-compose ps -q bosbase-node) tar xzf - < bosbase-backup.t
 To update to a new version:
 
 ```bash
-docker-compose pull
-docker-compose up -d
+docker compose -f docker-compose.yml pull
+docker compose -f docker-compose.yml up -d
 ```
 
 Or rebuild if using local builds:
 
 ```bash
-docker-compose build
-docker-compose up -d
+docker compose -f docker-compose.yml build
+docker compose -f docker-compose.yml up -d
 ```
 
 ## Monitoring and Logs
@@ -400,11 +488,12 @@ docker-compose up -d
 
 ```bash
 # All services
-docker-compose logs -f
+docker compose -f docker-compose.yml logs -f
+docker compose -f docker-compose.db.yml logs -f
 
 # Specific service
-docker-compose logs -f bosbase-node
-docker-compose logs -f bosbasedb-node
+docker compose -f docker-compose.yml logs -f bosbase-node
+docker compose -f docker-compose.db.yml logs -f postgres-db
 ```
 
 ### Health Checks
@@ -413,20 +502,21 @@ docker-compose logs -f bosbasedb-node
 # BosBase health
 curl http://localhost:8090/api/health
 
-# database status
-curl http://localhost:4001/status
+# PostgreSQL health
+docker exec $(docker compose -f docker-compose.db.yml ps -q postgres-db) pg_isready -U postgres -d pbosbase
 ```
 
 ## Troubleshooting
 
 ### Port Already in Use
 
-If port 8090 or 4001 is already in use:
+If port 8090, 2678, or 5432 is already in use:
 
 ```yaml
-# In docker-compose.yml, change:
+# In docker-compose.yml or docker-compose.db.yml, change:
 ports:
   - "8091:8090"  # Change 8090 to 8091
+  - "5433:5432"  # Change 5432 to 5433
 ```
 
 ### Permission Issues
@@ -434,7 +524,7 @@ ports:
 If you encounter permission errors:
 
 ```bash
-sudo chown -R $USER:$USER bosbase-data bosbasedb-node1-data
+sudo chown -R $USER:$USER bosbase-data postgres-data pb_hooks
 ```
 
 ### Database Connection Issues
@@ -442,19 +532,21 @@ sudo chown -R $USER:$USER bosbase-data bosbasedb-node1-data
 Check if database is ready:
 
 ```bash
-docker-compose logs bosbasedb-node | grep "node ready"
+docker compose -f docker-compose.db.yml logs postgres-db | grep "ready to accept connections"
 ```
 
-Wait for the message "node ready" before starting bosbase-node.
+Wait for the message "ready to accept connections" before accessing bosbase-node.
 
 ### Reset Everything
 
 ⚠️ **Warning: This deletes all data!**
 
 ```bash
-docker-compose down -v
-rm -rf bosbase-data bosbasedb-node1-data
-docker-compose up -d
+docker compose -f docker-compose.yml down -v
+docker compose -f docker-compose.db.yml down -v
+rm -rf bosbase-data postgres-data pb_hooks
+docker compose -f docker-compose.db.yml up -d
+docker compose -f docker-compose.yml up -d
 ```
 
 ## Production Recommendations

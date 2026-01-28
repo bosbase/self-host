@@ -1,10 +1,5 @@
 services:
   bosbase-node:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-      args:
-        CGO_ENABLED: 1
     image: bosbase/bosbase:ve1
     restart: unless-stopped
     environment:
