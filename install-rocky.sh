@@ -246,36 +246,76 @@ configure_selinux_firewall() {
 
 write_compose_file() {
   local compose_path="$INSTALL_DIR/docker-compose.yml"
-  cat > "$compose_path" <<EOF
+  cat > "$compose_path" <<'EOF'
 services:
-  bosbasedb-node:
-    image: bosbase/bosbasedb:vb1
+  postgres-db:
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
-      HTTP_ADDR: 0.0.0.0:4001
-      RAFT_ADDR: 0.0.0.0:4002
-      HTTP_ADV_ADDR: bosbasedb-node:4001
-      RAFT_ADV_ADDR: bosbasedb-node:4002
-      NODE_ID: node1
+      POSTGRES_DB: pbosbase
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     volumes:
-      - ./bosbasedb-node1-data:/bosbasedb/file
-    command: ["-bootstrap-expect", "1"]
+      - ./postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - basenode
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d pbosbase"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
+networks:
+  basenode:
+    driver: bridge
+    name: basenode
+EOF
+
+  cat > "$INSTALL_DIR/docker-compose.app.yml" <<EOF
+services:
   bosbase-node:
-    image: bosbase/bosbase:vb1
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        CGO_ENABLED: 1
+    image: bosbase/bosbase:ve1
     restart: unless-stopped
     environment:
-      SASSPB_BOSBASEDB_URL: http://bosbasedb-node:4001
-      OPENAI_API_KEY: \${OPENAI_API_KEY:-}
-      OPENAI_BASE_URL: \${OPENAI_BASE_URL:-}
+      SASSPB_POSTGRES_URL: postgres://postgres:postgres@postgres-db:5432/pbosbase?sslmode=disable
       BS_ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      OPENAI_API_KEY: \${OPENAI_API_KEY:-sk-af61vU1kIT0uw5YzOM7VRM3KGrxBAfuhVgJX9ghtkHfdRVsu}
+      OPENAI_BASE_URL: \${OPENAI_BASE_URL:-https://api.chatanywhere.org/v1}
+      PB_ACTIVATION_VERIFY_URL: \${PB_ACTIVATION_VERIFY_URL:-https://ve.bosbase.com/verify}
+      WASM_ENABLE: \${WASM_ENABLE:-true}
+      WASM_INSTANCE_NUM: \${WASM_INSTANCE_NUM:-32}
+      SCRIPT_CONCURRENCY: \${SCRIPT_CONCURRENCY:-32}
+      FUNCTION_CONN_NUM: \${FUNCTION_CONN_NUM:-10}
+      EXECUTE_PATH: \${EXECUTE_PATH:-/pb/functions}
+      PB_DATA_MAX_OPEN_CONNS: \${PB_DATA_MAX_OPEN_CONNS:-30}
+      PB_DATA_MAX_IDLE_CONNS: \${PB_DATA_MAX_IDLE_CONNS:-15}
+      PB_AUX_MAX_OPEN_CONNS: \${PB_AUX_MAX_OPEN_CONNS:-10}
+      PB_AUX_MAX_IDLE_CONNS: \${PB_AUX_MAX_IDLE_CONNS:-3}
+      PB_QUERY_TIMEOUT: \${PB_QUERY_TIMEOUT:-300s}
     ports:
       - "8090:8090"
+      - "2678:2678"
     volumes:
       - ./bosbase-data:/pb/pb_data
+      - ./pb_hooks:/pb_hooks
+    networks:
+      - basenode
     depends_on:
-      - bosbasedb-node
-    command: ["/pb/bosbase", "serve", "--http=0.0.0.0:8090", "--encryptionEnv", "BS_ENCRYPTION_KEY"]
+      postgres-db:
+        condition: service_healthy
+
+networks:
+  basenode:
+    external: true
+    name: basenode
 EOF
 }
 
@@ -285,6 +325,17 @@ write_env_file() {
 OPENAI_API_KEY=${OPENAI_KEY}
 OPENAI_BASE_URL=${OPENAI_BASE_URL_VALUE}
 BS_ENCRYPTION_KEY=${ENCRYPTION_KEY}
+PB_ACTIVATION_VERIFY_URL=\${PB_ACTIVATION_VERIFY_URL:-https://ve.bosbase.com/verify}
+WASM_ENABLE=\${WASM_ENABLE:-true}
+WASM_INSTANCE_NUM=\${WASM_INSTANCE_NUM:-32}
+SCRIPT_CONCURRENCY=\${SCRIPT_CONCURRENCY:-32}
+FUNCTION_CONN_NUM=\${FUNCTION_CONN_NUM:-10}
+EXECUTE_PATH=\${EXECUTE_PATH:-/pb/functions}
+PB_DATA_MAX_OPEN_CONNS=\${PB_DATA_MAX_OPEN_CONNS:-30}
+PB_DATA_MAX_IDLE_CONNS=\${PB_DATA_MAX_IDLE_CONNS:-15}
+PB_AUX_MAX_OPEN_CONNS=\${PB_AUX_MAX_OPEN_CONNS:-10}
+PB_AUX_MAX_IDLE_CONNS=\${PB_AUX_MAX_IDLE_CONNS:-3}
+PB_QUERY_TIMEOUT=\${PB_QUERY_TIMEOUT:-300s}
 EOF
   chmod 600 "$env_path"
 }
@@ -356,8 +407,8 @@ After=docker.service
 
 [Service]
 WorkingDirectory=${INSTALL_DIR}
-ExecStart=/usr/bin/docker compose --project-name ${PROJECT_NAME} up -d
-ExecStop=/usr/bin/docker compose --project-name ${PROJECT_NAME} down
+ExecStart=/usr/bin/docker compose --project-name ${PROJECT_NAME} -f docker-compose.yml -f docker-compose.app.yml up -d
+ExecStop=/usr/bin/docker compose --project-name ${PROJECT_NAME} -f docker-compose.yml -f docker-compose.app.yml down
 TimeoutStartSec=0
 RemainAfterExit=yes
 
@@ -382,16 +433,21 @@ prepare_directories() {
     log "Removing existing bosbase-data directory..."
     rm -rf "$INSTALL_DIR/bosbase-data"
   fi
-  if [[ -d "$INSTALL_DIR/bosbasedb-node1-data" ]]; then
-    log "Removing existing bosbasedb-node1-data directory..."
-    rm -rf "$INSTALL_DIR/bosbasedb-node1-data"
+  if [[ -d "$INSTALL_DIR/postgres-data" ]]; then
+    log "Removing existing postgres-data directory..."
+    rm -rf "$INSTALL_DIR/postgres-data"
   fi
-  install -d -m 755 "$INSTALL_DIR/bosbase-data" "$INSTALL_DIR/bosbasedb-node1-data"
+  if [[ -d "$INSTALL_DIR/pb_hooks" ]]; then
+    log "Preserving existing pb_hooks directory..."
+  else
+    install -d -m 755 "$INSTALL_DIR/pb_hooks"
+  fi
+  install -d -m 755 "$INSTALL_DIR/bosbase-data" "$INSTALL_DIR/postgres-data"
 }
 
 run_compose() {
   log "Starting Docker Compose stack..."
-  (cd "$INSTALL_DIR" && docker compose --project-name "$PROJECT_NAME" up -d)
+  (cd "$INSTALL_DIR" && docker compose --project-name "$PROJECT_NAME" -f docker-compose.yml -f docker-compose.app.yml up -d)
 }
 
 health_check() {
