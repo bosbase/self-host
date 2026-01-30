@@ -394,7 +394,11 @@ ${email_block}${DOMAIN} {
   }
 
   handle {
-    encode gzip zstd
+    @notWebsocket {
+      not header Connection *Upgrade*
+    }
+    encode @notWebsocket gzip zstd
+
     reverse_proxy 127.0.0.1:8090 {
       header_up X-Real-IP {remote_host}
       header_up X-Forwarded-For {remote_host}

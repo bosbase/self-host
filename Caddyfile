@@ -50,8 +50,13 @@ yourdomain.com {
     }
 
     # Handle all other requests with compression
+    # Note: encode must come AFTER websocket matcher to avoid "connection hijacked" errors
     handle {
-        encode gzip zstd
+        @notWebsocket {
+            not header Connection *Upgrade*
+        }
+        encode @notWebsocket gzip zstd
+
         reverse_proxy localhost:8090 {
             header_up X-Real-IP {remote_host}
             header_up X-Forwarded-For {remote_host}
