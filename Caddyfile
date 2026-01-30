@@ -2,14 +2,7 @@
 # Place this file in /etc/caddy/Caddyfile
 
 yourdomain.com {
-    # Security headers
-    header {
-        X-Frame-Options "SAMEORIGIN"
-        X-Content-Type-Options "nosniff"
-        X-XSS-Protection "1; mode=block"
-        Referrer-Policy "no-referrer-when-downgrade"
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
-    }
+ 
 
     # Handle /booster* requests to port 2678
     handle /booster* {
@@ -27,36 +20,10 @@ yourdomain.com {
         }
     }
 
-    # WebSocket matcher
-    @websocket {
-        header Connection *Upgrade*
-        header Upgrade websocket
-    }
 
-    # Handle WebSocket connections separately (no compression)
-    handle @websocket {
-        reverse_proxy localhost:8090 {
-            header_up Upgrade {http.upgrade}
-            header_up Connection {http.connection}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
-            header_up X-Forwarded-Host {host}
 
-            transport http {
-                max_conns_per_host 0
-            }
-        }
-    }
-
-    # Handle all other requests with compression
-    # Note: encode must come AFTER websocket matcher to avoid "connection hijacked" errors
+    # Handle all other requests
     handle {
-        @notWebsocket {
-            not header Connection *Upgrade*
-        }
-        encode @notWebsocket gzip zstd
-
         reverse_proxy localhost:8090 {
             header_up X-Real-IP {remote_host}
             header_up X-Forwarded-For {remote_host}

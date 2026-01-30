@@ -353,13 +353,7 @@ write_caddyfile() {
 
   cat > "$caddy_path" <<EOF
 ${email_block}${DOMAIN} {
-  header {
-    X-Frame-Options "SAMEORIGIN"
-    X-Content-Type-Options "nosniff"
-    X-XSS-Protection "1; mode=block"
-    Referrer-Policy "no-referrer-when-downgrade"
-    Strict-Transport-Security "max-age=31536000; includeSubDomains"
-  }
+ 
 
   handle /booster* {
     reverse_proxy 127.0.0.1:2678 {
@@ -376,32 +370,9 @@ ${email_block}${DOMAIN} {
     }
   }
 
-  @websocket {
-    header Connection *Upgrade*
-    header Upgrade websocket
-  }
-
-  handle @websocket {
-    reverse_proxy 127.0.0.1:8090 {
-      header_up Upgrade {http.upgrade}
-      header_up Connection {http.connection}
-      header_up X-Real-IP {remote_host}
-      header_up X-Forwarded-For {remote_host}
-      header_up X-Forwarded-Proto {scheme}
-      header_up X-Forwarded-Host {host}
-
-      transport http {
-        max_conns_per_host 0
-      }
-    }
-  }
+ 
 
   handle {
-    @notWebsocket {
-      not header Connection *Upgrade*
-    }
-    encode @notWebsocket gzip zstd
-
     reverse_proxy 127.0.0.1:8090 {
       header_up X-Real-IP {remote_host}
       header_up X-Forwarded-For {remote_host}
