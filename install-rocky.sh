@@ -29,6 +29,7 @@ Options:
   --openai-key VALUE       OPENAI_API_KEY to inject into the stack
   --openai-base-url VALUE  OPENAI_BASE_URL to inject into the stack
   --encryption-key VALUE   32 character BS_ENCRYPTION_KEY (auto-generated if omitted)
+  --postgres-password VALUE 16 character POSTGRES_PASSWORD (auto-generated if omitted)
   --install-dir PATH       Installation directory (default: /opt/bosbase)
   --user NAME              System user to grant docker access (defaults to invoking user)
   --non-interactive        Fail instead of prompting for missing values
@@ -36,7 +37,7 @@ Options:
 
 Values may also be provided via environment variables:
   BOSBASE_DOMAIN, BOSBASE_ACME_EMAIL, OPENAI_API_KEY, OPENAI_BASE_URL,
-  BS_ENCRYPTION_KEY, BOSBASE_INSTALL_DIR, BOSBASE_USER
+  BS_ENCRYPTION_KEY, POSTGRES_PASSWORD, BOSBASE_INSTALL_DIR, BOSBASE_USER
 EOF
 }
 
@@ -75,6 +76,7 @@ parse_args() {
   OPENAI_KEY="${OPENAI_API_KEY:-}"
   OPENAI_BASE_URL_VALUE="${OPENAI_BASE_URL:-}"
   ENCRYPTION_KEY="${BS_ENCRYPTION_KEY:-}"
+  POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
   INSTALL_DIR="${BOSBASE_INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
   TARGET_USER="${BOSBASE_USER:-${SUDO_USER:-}}"
   NON_INTERACTIVE=0
@@ -99,6 +101,10 @@ parse_args() {
         ;;
       --encryption-key)
         ENCRYPTION_KEY="$2"
+        shift 2
+        ;;
+      --postgres-password)
+        POSTGRES_PASSWORD="$2"
         shift 2
         ;;
       --install-dir)
@@ -245,7 +251,7 @@ configure_selinux_firewall() {
 }
 
 write_compose_file() {
-  cat > "$INSTALL_DIR/docker-compose.db.yml" <<'EOF'
+  cat > "$INSTALL_DIR/docker-compose.db.yml" <<EOF
 services:
   postgres-db:
     image: pgvector/pgvector:pg16
@@ -253,7 +259,7 @@ services:
     environment:
       POSTGRES_DB: pbosbase
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - ./postgres-data:/var/lib/postgresql/data
     ports:
@@ -279,7 +285,7 @@ services:
     image: bosbase/bosbase:ve1
     restart: unless-stopped
     environment:
-      SASSPB_POSTGRES_URL: postgres://postgres:postgres@postgres-db:5432/pbosbase?sslmode=disable
+      SASSPB_POSTGRES_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres-db:5432/pbosbase?sslmode=disable
       BS_ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       OPENAI_API_KEY: \${OPENAI_API_KEY:-sk-af61vU1kIT0uw5YzOM7VRM3KGrxBAfuhVgJX9ghtkHfdRVsu}
       OPENAI_BASE_URL: \${OPENAI_BASE_URL:-https://api.chatanywhere.org/v1}
@@ -349,16 +355,33 @@ write_caddyfile() {
 ${email_block}${DOMAIN} {
   encode gzip zstd
 
-  reverse_proxy 127.0.0.1:8090 {
-    header_up Upgrade {http.upgrade}
-    header_up Connection {http.connection}
-    header_up X-Real-IP {remote_host}
-    header_up X-Forwarded-For {remote_host}
-    header_up X-Forwarded-Proto {scheme}
-    header_up X-Forwarded-Host {host}
+  handle /booster* {
+    reverse_proxy 127.0.0.1:2678 {
+      header_up Upgrade {http.upgrade}
+      header_up Connection {http.connection}
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-Host {host}
 
-    transport http {
-      max_conns_per_host 0
+      transport http {
+        max_conns_per_host 0
+      }
+    }
+  }
+
+  handle {
+    reverse_proxy 127.0.0.1:8090 {
+      header_up Upgrade {http.upgrade}
+      header_up Connection {http.connection}
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-Host {host}
+
+      transport http {
+        max_conns_per_host 0
+      }
     }
   }
 
@@ -486,6 +509,18 @@ main() {
     die "BS_ENCRYPTION_KEY must be exactly 32 characters (got ${#ENCRYPTION_KEY})."
   fi
 
+  if [[ -z "$POSTGRES_PASSWORD" ]]; then
+    log "Generating POSTGRES_PASSWORD..."
+    if ! command -v openssl >/dev/null 2>&1; then
+      dnf -y install openssl
+    fi
+    POSTGRES_PASSWORD=$(openssl rand -base64 16 | tr -d '=+/' | cut -c1-16)
+  fi
+
+  if [[ ${#POSTGRES_PASSWORD} -ne 16 ]]; then
+    die "POSTGRES_PASSWORD must be exactly 16 characters (got ${#POSTGRES_PASSWORD})."
+  fi
+
   log "Installing prerequisites..."
   ensure_docker
   ensure_permissions
@@ -507,6 +542,12 @@ main() {
   log "Installation complete."
   log "Files installed under $INSTALL_DIR"
   log "Domain ${DOMAIN} is now proxied via Caddy."
+  log ""
+  log "========================================"
+  log "PostgreSQL Password: ${POSTGRES_PASSWORD}"
+  log "========================================"
+  log ""
+  log "IMPORTANT: Save this password securely! It is required for database access."
   log ""
   log "To set up a superuser account, run:"
   log "  docker exec bosbase-bosbase-node-1 /pb/bosbase superuser upsert yourloginemail yourpassword"
