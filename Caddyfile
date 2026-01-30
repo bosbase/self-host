@@ -7,12 +7,17 @@ yourdomain.com {
         # WebSocket support for realtime subscriptions
         header_up Upgrade {http.upgrade}
         header_up Connection {http.connection}
-        
+
         # Standard proxy headers
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}
         header_up X-Forwarded-Proto {scheme}
         header_up X-Forwarded-Host {host}
+
+        # Transport settings
+        transport http {
+            max_conns_per_host 0
+        }
     }
     
     # Security headers
@@ -24,12 +29,6 @@ yourdomain.com {
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
     }
     
-    # File upload size limit
-    reverse_proxy localhost:8090 {
-        transport http {
-            max_conns_per_host 0
-        }
-    }
     
     # Logging
     log {
