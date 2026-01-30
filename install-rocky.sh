@@ -355,6 +355,11 @@ write_caddyfile() {
 ${email_block}${DOMAIN} {
   encode gzip zstd
 
+  @websocket {
+    header Connection *Upgrade*
+    header Upgrade websocket
+  }
+
   handle /booster* {
     reverse_proxy 127.0.0.1:2678 {
       header_up Upgrade {http.upgrade}
@@ -391,6 +396,8 @@ ${email_block}${DOMAIN} {
     X-XSS-Protection "1; mode=block"
     Referrer-Policy "no-referrer-when-downgrade"
     Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    # Don't block WebSocket connections
+    -X-Frame-Options
   }
 }
 
