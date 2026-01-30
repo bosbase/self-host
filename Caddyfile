@@ -2,24 +2,6 @@
 # Place this file in /etc/caddy/Caddyfile
 
 yourdomain.com {
-    # Reverse proxy to BosBase
-    reverse_proxy localhost:8090 {
-        # WebSocket support for realtime subscriptions
-        header_up Upgrade {http.upgrade}
-        header_up Connection {http.connection}
-
-        # Standard proxy headers
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
-        header_up X-Forwarded-Host {host}
-
-        # Transport settings
-        transport http {
-            max_conns_per_host 0
-        }
-    }
-    
     # Security headers
     header {
         X-Frame-Options "SAMEORIGIN"
@@ -28,8 +10,60 @@ yourdomain.com {
         Referrer-Policy "no-referrer-when-downgrade"
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
     }
-    
-    
+
+    # Handle /booster* requests to port 2678
+    handle /booster* {
+        reverse_proxy localhost:2678 {
+            header_up Upgrade {http.upgrade}
+            header_up Connection {http.connection}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-Host {host}
+
+            transport http {
+                max_conns_per_host 0
+            }
+        }
+    }
+
+    # WebSocket matcher
+    @websocket {
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+
+    # Handle WebSocket connections separately (no compression)
+    handle @websocket {
+        reverse_proxy localhost:8090 {
+            header_up Upgrade {http.upgrade}
+            header_up Connection {http.connection}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-Host {host}
+
+            transport http {
+                max_conns_per_host 0
+            }
+        }
+    }
+
+    # Handle all other requests with compression
+    handle {
+        encode gzip zstd
+        reverse_proxy localhost:8090 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-Host {host}
+
+            transport http {
+                max_conns_per_host 0
+            }
+        }
+    }
+
     # Logging
     log {
         output file /var/log/caddy/bosbase.log
