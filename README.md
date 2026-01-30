@@ -5,7 +5,7 @@ This guide explains how to deploy BosBase as a standalone single-node installati
 ## Prerequisites
 
 - Docker and Docker Compose installed
-- A server with at least 0.2G RAM and 1GB disk space
+- A server with at least 2G RAM and 10GB disk space
 - Domain name (optional, for production deployments)
 
 ## Quick Start with Docker Compose
@@ -169,7 +169,7 @@ This will start:
 ### 4. Access the Application
 
 - **Admin UI**: http://localhost:8090/_/
-- **API**: http://localhost:8090/api/
+- **API**: http://localhost:8090
 
 Create your first admin user by accessing the admin UI and following the setup wizard.
 
