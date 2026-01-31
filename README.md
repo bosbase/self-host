@@ -14,6 +14,17 @@ This guide explains how to deploy BosBase as a standalone single-node installati
 
 For freshly provisioned hosts you can run the bundled installers instead of performing every step manually.
 
+### Auto-Detect Install (Recommended)
+
+The unified installer automatically detects your OS (Ubuntu or Rocky Linux):
+
+```bash
+git clone https://github.com/bosbase/self-host.git
+cd self-host
+chmod +x install.sh
+sudo ./install.sh --domain yourdomain.com --email you@example.com
+```
+
 ### Ubuntu 22.04+
 
 ```bash
@@ -22,17 +33,6 @@ cd self-host
 chmod +x install-ubuntu.sh
 sudo ./install-ubuntu.sh --domain yourdomain.com --email you@example.com
 ```
-
-- **Important:** `--openai-key`/`--openai-base-url` must be set if you want to use vector and LLM document features. Example:
-  ```bash
-  sudo ./install-ubuntu.sh --domain yourdomain.com --email you@example.com \
-    --openai-key sk-xxxxx \
-    --openai-base-url https://api.openai.com/v1
-  ```
-  You can also set these via environment variables (`OPENAI_API_KEY`, `OPENAI_BASE_URL`) or edit `/opt/bosbase/.env` later.
-- The script will prompt for any values you do not pass via flags (domain, email, `BS_ENCRYPTION_KEY`).
-- `--non-interactive` forces the script to fail when required values are missing instead of prompting.
-- Assets are installed under `/opt/bosbase`, Docker + Caddy are installed if missing, and `docker-compose@bosbase.service` is enabled automatically.
 
 ### Rocky Linux 9.x
 
@@ -43,13 +43,80 @@ chmod +x install-rocky.sh
 sudo ./install-rocky.sh --domain yourdomain.com --email you@example.com
 ```
 
-This installer mirrors the Ubuntu behavior, but uses `dnf`, enables the Caddy COPR, configures SELinux/firewalld, and manages the same `/opt/bosbase` layout. 
+### Install Options
 
-**Note:** `--openai-key`/`--openai-base-url` must be set if you want to use vector and LLM document features. Example:
+- **Important:** `--openai-key`/`--openai-base-url` can be set during installation for vector and LLM document features:
+  ```bash
+  sudo ./install.sh --domain yourdomain.com --email you@example.com \
+    --openai-key sk-xxxxx \
+    --openai-base-url https://api.openai.com/v1
+  ```
+- The script will prompt for any values you do not pass via flags (domain, email, `BS_ENCRYPTION_KEY`).
+- `--non-interactive` forces the script to fail when required values are missing instead of prompting.
+- Assets are installed under `/opt/bosbase`, Docker + Caddy are installed if missing, and `docker-compose@bosbase.service` is enabled automatically.
+
+## Post-Installation Configuration
+
+### Configuring OPENAI_API_KEY and OPENAI_BASE_URL
+
+If you didn't set the OpenAI configuration during installation, or need to update it later, follow these steps:
+
+#### Method 1: Edit the .env file (Recommended)
+
 ```bash
-sudo ./install-rocky.sh --domain yourdomain.com --email you@example.com \
-  --openai-key sk-xxxxx \
-  --openai-base-url https://api.openai.com/v1
+sudo nano /opt/bosbase/.env
+```
+
+Update or add the following lines:
+
+```bash
+OPENAI_API_KEY=sk-your-api-key-here
+OPENAI_BASE_URL=https://api.openai.com/v1
+```
+
+Then restart the service:
+
+```bash
+sudo systemctl restart docker-compose@bosbase.service
+```
+
+#### Method 2: Edit docker-compose.yml directly
+
+```bash
+sudo nano /opt/bosbase/docker-compose.yml
+```
+
+Find and update the environment variables:
+
+```yaml
+environment:
+  OPENAI_API_KEY: sk-your-api-key-here
+  OPENAI_BASE_URL: https://api.openai.com/v1
+```
+
+Then restart:
+
+```bash
+cd /opt/bosbase
+sudo docker compose down
+sudo docker compose -f docker-compose.db.yml up -d
+sudo docker compose -f docker-compose.yml up -d
+```
+
+#### Common OPENAI_BASE_URL values
+
+| Provider | Base URL |
+|----------|----------|
+| OpenAI | `https://api.openai.com/v1` |
+| Azure OpenAI | `https://YOUR_RESOURCE.openai.azure.com/openai/deployments/YOUR_DEPLOYMENT` |
+| Custom/Self-hosted | Your custom endpoint URL |
+
+#### Verify Configuration
+
+After restarting, check that the service is running:
+
+```bash
+sudo docker logs bosbase-bosbase-node-1 | grep -i openai
 ```
 
 ### 1. Pull Docker Images
